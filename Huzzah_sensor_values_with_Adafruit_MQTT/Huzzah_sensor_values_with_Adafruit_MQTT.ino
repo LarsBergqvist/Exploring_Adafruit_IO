@@ -1,7 +1,7 @@
 //
 // This sketch uses an ESP8266-based Adafruit Feather Huzzah for measuring
 // temperature and humidity with a DHT11 sensor
-// The values are sent as feeds to an Adafruit IO account via client REST calls
+// The values are sent as feeds to an Adafruit IO account via Adafruit MQTT publish calls
 //
 // To save power, deep sleep from the ESP8266 library is used
 // To wake up the board a signal on pin 16 is sent to the reset input
@@ -11,40 +11,64 @@
 //
 
 #include <ESP8266WiFi.h>
-#include "Adafruit_IO_Client.h"
+#include "Adafruit_MQTT.h"
+#include "Adafruit_MQTT_Client.h"
 
 // Your personal WiFi- and Adafruit IO credentials
-// Should define WLAN_SSID, WLAN_PASS and AIO_KEY
+// Should define WLAN_SSID, WLAN_PASS and AIO_KEY and AIO_USERNAME
 #include "WIFI_and_Adafruit_IO_parameters.h"
 
+//
+// Adafruit IO setup
+//
+#define AIO_SERVER      "io.adafruit.com"
+#define AIO_SERVERPORT  1883
+
+WiFiClient client;
+
+// Store the MQTT server, username, and password in flash memory.
+// This is required for using the Adafruit MQTT library.
+const char MQTT_SERVER[] PROGMEM    = AIO_SERVER;
+const char MQTT_USERNAME[] PROGMEM  = AIO_USERNAME;
+const char MQTT_PASSWORD[] PROGMEM  = AIO_KEY;
+
+Adafruit_MQTT_Client mqtt(&client, MQTT_SERVER, AIO_SERVERPORT, MQTT_USERNAME, MQTT_PASSWORD);
+
+const char TEMPERATURE_FEED[] PROGMEM = AIO_USERNAME "/feeds/temperatureMQTT";
+Adafruit_MQTT_Publish temperaturePub = Adafruit_MQTT_Publish(&mqtt, TEMPERATURE_FEED);
+
+const char HUMIDITY_FEED[] PROGMEM = AIO_USERNAME "/feeds/humidityMQTT";
+Adafruit_MQTT_Publish humidityPub = Adafruit_MQTT_Publish(&mqtt, HUMIDITY_FEED);
+
+//
 // Sensor setup
+//
 #include <DHT.h>
 #define DHTPIN 12       // Digital input pin for DHT11
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
-// WiFi and Adafruit IO setup
-WiFiClient client;
-Adafruit_IO_Client aio = Adafruit_IO_Client(client, AIO_KEY);
-Adafruit_IO_Feed humidityFeed = aio.getFeed("garageHumidity");
-Adafruit_IO_Feed temperatureFeed = aio.getFeed("garageTemperature");
-
 #define SLEEP_SECONDS 600
 
-//
-// Method for converting a float to a string as there
-// seems to be a bug in the Adafruit_Client which returns
-// errors when sending floats directly 
-char *ftoa(char *buffer, float f)
-{ 
-  char *returnString = buffer;
-  long integerPart = (long)f;
-  itoa(integerPart, buffer, 10);
-  while (*buffer != '\0') buffer++;
-  *buffer++ = '.';
-  long decimalPart = abs((long)((f - integerPart) * 100));
-  itoa(decimalPart, buffer, 10);
-  return returnString;
+void MQTT_connect() 
+{
+  if (mqtt.connected()) 
+  {
+    return;
+  }
+
+  Serial.print("Connecting to MQTT... ");
+
+  int8_t ret;
+  while ((ret = mqtt.connect()) != 0) 
+  { 
+    // connect will return 0 for connected
+    Serial.println(mqtt.connectErrorString(ret));
+    Serial.println("Retrying MQTT connection in 5 seconds...");
+    mqtt.disconnect();
+    delay(5000);
+  }
+  Serial.println("MQTT Connected!");
 }
 
 void sendDataToAdafruitIO(float temperature, float humidity)
@@ -59,11 +83,11 @@ void sendDataToAdafruitIO(float temperature, float humidity)
 
   Serial.println("Start sending data to Adafruit IO...");
 
-  char temperature_str[20];
-  ftoa(temperature_str,temperature);
-  if (temperatureFeed.send(temperature_str))
+  MQTT_connect();
+
+  if (temperaturePub.publish(temperature))
   {
-    Serial.println(temperature_str);
+    Serial.println(temperature);
     Serial.println("Sent temperature ok");
   }
   else
@@ -71,11 +95,9 @@ void sendDataToAdafruitIO(float temperature, float humidity)
     Serial.println("Failed sending temperature");
   }
 
-  char humidity_str[20];
-  ftoa(humidity_str,humidity);
-  if (humidityFeed.send(humidity_str))
+  if (humidityPub.publish(humidity))
   {
-    Serial.println(humidity_str);
+    Serial.println(humidity);
     Serial.println("Sent humidity ok");
   }
   else
@@ -122,11 +144,9 @@ void setupWiFi()
 }
 
 void setup() 
-{  
+{
   setupWiFi();
   
-  aio.begin();
-
   dht.begin();
 
   float h = dht.readHumidity();
@@ -140,7 +160,6 @@ void setup()
   Serial.print(SLEEP_SECONDS);
   Serial.println(" seconds");
   ESP.deepSleep(SLEEP_SECONDS * 1000000);
-
 }
 
 void loop() 
