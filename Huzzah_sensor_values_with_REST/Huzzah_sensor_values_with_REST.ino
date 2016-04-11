@@ -86,7 +86,7 @@ void sendDataToAdafruitIO(float temperature, float humidity)
   unsigned long endTime = millis();
 
   Serial.print("Sending data took ");
-  Serial.print((endTime-startTime)/1000);
+  Serial.print((endTime-startTime)/1000.0);
   Serial.println(" second(s)");
 }
 
@@ -116,7 +116,7 @@ void setupWiFi()
   unsigned long endTime = millis();
 
   Serial.print("Setting up WiFi took ");
-  Serial.print((endTime-startTime)/1000);
+  Serial.print((endTime-startTime)/1000.0);
   Serial.println(" second(s)");
 
 }
