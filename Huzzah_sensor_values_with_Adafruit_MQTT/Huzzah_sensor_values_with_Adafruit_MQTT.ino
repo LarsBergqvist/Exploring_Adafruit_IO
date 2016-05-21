@@ -22,9 +22,11 @@
 // Adafruit IO setup
 //
 #define AIO_SERVER      "io.adafruit.com"
-#define AIO_SERVERPORT  1883
+#define AIO_SERVERPORT  8883 // Use SSL
+//#define AIO_SERVERPORT  1883 // No SSL
 
-WiFiClient client;
+//WiFiClient client;      // No SSL
+WiFiClientSecure client;  // Use SSL
 
 // Store the MQTT server, username, and password in flash memory.
 // This is required for using the Adafruit MQTT library.
